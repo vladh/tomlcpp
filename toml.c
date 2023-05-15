@@ -45,6 +45,7 @@ void toml_set_memutil(void *(*xxmalloc)(size_t), void (*xxfree)(void *)) {
     ppfree = xxfree;
 }
 
+#define ALIGN8(sz) (((sz) + 7) & ~7)
 #define MALLOC(a) ppmalloc(a)
 #define FREE(a) ppfree(a)
 
@@ -53,7 +54,7 @@ void toml_set_memutil(void *(*xxmalloc)(size_t), void (*xxfree)(void *)) {
 #define calloc(x, y) error - forbidden - use CALLOC instead
 
 static void *CALLOC(size_t nmemb, size_t sz) {
-  int nb = sz * nmemb;
+  int nb = ALIGN8(sz) * nmemb;
   void *p = MALLOC(nb);
   if (p) {
     memset(p, 0, nb);
@@ -67,7 +68,7 @@ static void *CALLOC(size_t nmemb, size_t sz) {
 
 static char *STRDUP(const char *s) {
   int len = strlen(s);
-  char *p = MALLOC(len + 1);
+  char *p = (char *)MALLOC(len + 1);
   if (p) {
     memcpy(p, s, len);
     p[len] = 0;
@@ -81,7 +82,7 @@ static char *STRDUP(const char *s) {
 
 static char *STRNDUP(const char *s, size_t n) {
   size_t len = strnlen(s, n);
-  char *p = MALLOC(len + 1);
+  char *p = (char *)MALLOC(len + 1);
   if (p) {
     memcpy(p, s, len);
     p[len] = 0;
@@ -220,8 +221,8 @@ int toml_ucs_to_utf8(int64_t code, char buf[6]) {
      110xxxxx 10xxxxxx
   */
   if (code <= 0x000007FF) {
-    buf[0] = 0xc0 | (code >> 6);
-    buf[1] = 0x80 | (code & 0x3f);
+    buf[0] = (unsigned char) (0xc0 | (code >> 6));
+    buf[1] = (unsigned char) (0x80 | (code & 0x3f));
     return 2;
   }
 
@@ -229,9 +230,9 @@ int toml_ucs_to_utf8(int64_t code, char buf[6]) {
      1110xxxx 10xxxxxx 10xxxxxx
   */
   if (code <= 0x0000FFFF) {
-    buf[0] = 0xe0 | (code >> 12);
-    buf[1] = 0x80 | ((code >> 6) & 0x3f);
-    buf[2] = 0x80 | (code & 0x3f);
+    buf[0] = (unsigned char) (0xe0 | (code >> 12));
+    buf[1] = (unsigned char) (0x80 | ((code >> 6) & 0x3f));
+    buf[2] = (unsigned char) (0x80 | (code & 0x3f));
     return 3;
   }
 
@@ -239,10 +240,10 @@ int toml_ucs_to_utf8(int64_t code, char buf[6]) {
      11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
   */
   if (code <= 0x001FFFFF) {
-    buf[0] = 0xf0 | (code >> 18);
-    buf[1] = 0x80 | ((code >> 12) & 0x3f);
-    buf[2] = 0x80 | ((code >> 6) & 0x3f);
-    buf[3] = 0x80 | (code & 0x3f);
+    buf[0] = (unsigned char) (0xf0 | (code >> 18));
+    buf[1] = (unsigned char) (0x80 | ((code >> 12) & 0x3f));
+    buf[2] = (unsigned char) (0x80 | ((code >> 6) & 0x3f));
+    buf[3] = (unsigned char) (0x80 | (code & 0x3f));
     return 4;
   }
 
@@ -250,11 +251,11 @@ int toml_ucs_to_utf8(int64_t code, char buf[6]) {
      111110xx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
   */
   if (code <= 0x03FFFFFF) {
-    buf[0] = 0xf8 | (code >> 24);
-    buf[1] = 0x80 | ((code >> 18) & 0x3f);
-    buf[2] = 0x80 | ((code >> 12) & 0x3f);
-    buf[3] = 0x80 | ((code >> 6) & 0x3f);
-    buf[4] = 0x80 | (code & 0x3f);
+    buf[0] = (unsigned char) (0xf8 | (code >> 24));
+    buf[1] = (unsigned char) (0x80 | ((code >> 18) & 0x3f));
+    buf[2] = (unsigned char) (0x80 | ((code >> 12) & 0x3f));
+    buf[3] = (unsigned char) (0x80 | ((code >> 6) & 0x3f));
+    buf[4] = (unsigned char) (0x80 | (code & 0x3f));
     return 5;
   }
 
@@ -262,12 +263,12 @@ int toml_ucs_to_utf8(int64_t code, char buf[6]) {
      1111110x 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
   */
   if (code <= 0x7FFFFFFF) {
-    buf[0] = 0xfc | (code >> 30);
-    buf[1] = 0x80 | ((code >> 24) & 0x3f);
-    buf[2] = 0x80 | ((code >> 18) & 0x3f);
-    buf[3] = 0x80 | ((code >> 12) & 0x3f);
-    buf[4] = 0x80 | ((code >> 6) & 0x3f);
-    buf[5] = 0x80 | (code & 0x3f);
+    buf[0] = (unsigned char) (0xfc | (code >> 30));
+    buf[1] = (unsigned char) (0x80 | ((code >> 24) & 0x3f));
+    buf[2] = (unsigned char) (0x80 | ((code >> 18) & 0x3f));
+    buf[3] = (unsigned char) (0x80 | ((code >> 12) & 0x3f));
+    buf[4] = (unsigned char) (0x80 | ((code >> 6) & 0x3f));
+    buf[5] = (unsigned char) (0x80 | (code & 0x3f));
     return 6;
   }
 
@@ -411,24 +412,28 @@ static void *expand(void *p, int sz, int newsz) {
   if (!s)
     return 0;
 
-  memcpy(s, p, sz);
-  FREE(p);
+  if (p) {
+    memcpy(s, p, sz);
+    FREE(p);
+  }
   return s;
 }
 
 static void **expand_ptrarr(void **p, int n) {
-  void **s = MALLOC((n + 1) * sizeof(void *));
+  void **s = (void **)MALLOC((n + 1) * sizeof(void *));
   if (!s)
     return 0;
 
   s[n] = 0;
-  memcpy(s, p, n * sizeof(void *));
-  FREE(p);
+  if (p) {
+    memcpy(s, p, n * sizeof(void *));
+    FREE(p);
+  }
   return s;
 }
 
 static toml_arritem_t *expand_arritem(toml_arritem_t *p, int n) {
-  toml_arritem_t *pp = expand(p, n * sizeof(*p), (n + 1) * sizeof(*p));
+  toml_arritem_t *pp = (toml_arritem_t *)expand(p, n * sizeof(*p), (n + 1) * sizeof(*p));
   if (!pp)
     return 0;
 
@@ -449,7 +454,7 @@ static char *norm_lit_str(const char *src, int srclen, int multiline,
   for (;;) {
     if (off >= max - 10) { /* have some slack for misc stuff */
       int newmax = max + 50;
-      char *x = expand(dst, max, newmax);
+      char *x = (char *)expand(dst, max, newmax);
       if (!x) {
         xfree(dst);
         snprintf(errbuf, errbufsz, "out of memory");
@@ -498,7 +503,7 @@ static char *norm_basic_str(const char *src, int srclen, int multiline,
   for (;;) {
     if (off >= max - 10) { /* have some slack for misc stuff */
       int newmax = max + 50;
-      char *x = expand(dst, max, newmax);
+      char *x = (char *)expand(dst, max, newmax);
       if (!x) {
         xfree(dst);
         snprintf(errbuf, errbufsz, "out of memory");
@@ -1417,7 +1422,7 @@ toml_table_t *toml_parse(char *conf, char *errbuf, int errbufsz) {
   ctx.tok.len = 0;
 
   // make a root table
-  if (0 == (ctx.root = CALLOC(1, sizeof(*ctx.root)))) {
+  if (0 == (ctx.root = (toml_table_t *)CALLOC(1, sizeof(*ctx.root)))) {
     e_outofmemory(&ctx, FLINE);
     // Do not goto fail, root table not set up yet
     return 0;
@@ -1482,7 +1487,7 @@ toml_table_t *toml_parse_file(FILE *fp, char *errbuf, int errbufsz) {
 
     if (off == bufsz) {
       int xsz = bufsz + 1000;
-      char *x = expand(buf, bufsz, xsz);
+      char *x = (char *)expand(buf, bufsz, xsz);
       if (!x) {
         snprintf(errbuf, errbufsz, "out of memory");
         xfree(buf);
@@ -1506,7 +1511,7 @@ toml_table_t *toml_parse_file(FILE *fp, char *errbuf, int errbufsz) {
   /* tag on a NUL to cap the string */
   if (off == bufsz) {
     int xsz = bufsz + 1;
-    char *x = expand(buf, bufsz, xsz);
+    char *x = (char *)expand(buf, bufsz, xsz);
     if (!x) {
       snprintf(errbuf, errbufsz, "out of memory");
       xfree(buf);
@@ -1768,7 +1773,7 @@ static int scan_string(context_t *ctx, char *p, int lineno, int dotisspecial) {
   /* check for timestamp without quotes */
   if (0 == scan_date(p, 0, 0, 0) || 0 == scan_time(p, 0, 0, 0)) {
     // forward thru the timestamp
-    p += strspn(p, "0123456789.:+-T Z");
+    p += strspn(p, "0123456789.:+-Tt Zz");
     // squeeze out any spaces at end of string
     for (; p[-1] == ' '; p--)
       ;
@@ -1984,7 +1989,7 @@ int toml_rtots(toml_raw_t src_, toml_timestamp_t *ret) {
     p += 10;
     if (*p) {
       // parse the T or space separator
-      if (*p != 'T' && *p != ' ')
+      if (*p != 'T' && *p != 't' && *p != ' ')
         return -1;
       must_parse_time = 1;
       p++;
@@ -2159,7 +2164,7 @@ int toml_rtod_ex(toml_raw_t src, double *ret_, char *buf, int buflen) {
   /* decimal point, if used, must be surrounded by at least one digit on each
    * side */
   {
-    char *dot = strchr(s, '.');
+    char *dot = (char *)strchr(s, '.');
     if (dot) {
       if (dot == s || !isdigit(dot[-1]) || !isdigit(dot[1]))
         return -1;
@@ -2283,7 +2288,7 @@ toml_datum_t toml_timestamp_at(const toml_array_t *arr, int idx) {
   memset(&ret, 0, sizeof(ret));
   ret.ok = (0 == toml_rtots(toml_raw_at(arr, idx), &ts));
   if (ret.ok) {
-    ret.ok = !!(ret.u.ts = MALLOC(sizeof(*ret.u.ts)));
+    ret.ok = !!(ret.u.ts = (toml_timestamp_t *)MALLOC(sizeof(*ret.u.ts)));
     if (ret.ok) {
       *ret.u.ts = ts;
       if (ret.u.ts->year)
@@ -2344,7 +2349,7 @@ toml_datum_t toml_timestamp_in(const toml_table_t *arr, const char *key) {
   memset(&ret, 0, sizeof(ret));
   ret.ok = (0 == toml_rtots(toml_raw_in(arr, key), &ts));
   if (ret.ok) {
-    ret.ok = !!(ret.u.ts = MALLOC(sizeof(*ret.u.ts)));
+    ret.ok = !!(ret.u.ts = (toml_timestamp_t *)MALLOC(sizeof(*ret.u.ts)));
     if (ret.ok) {
       *ret.u.ts = ts;
       if (ret.u.ts->year)
